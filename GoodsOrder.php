@@ -181,7 +181,12 @@
     }
 
     public function getOrderInfo() {
-      $result = $this-> orderGet();
+    	try {
+      	$result = $this-> orderGet();
+    	} catch (ErrorException $e) {
+    		$result = ["success" => 0, "message" => $e->getMessage()];
+        return $result;
+    	}
       $items=[];
       if(isset($result["data"]["shipments"][0])) {
 
@@ -220,7 +225,7 @@
         }
       }
       $orderInfo["items"] = $items;
-      return $orderInfo;
+      return $orderInfo; //добавить поле success
     }
 
     public function getLabel() {
@@ -329,7 +334,7 @@
     private function getServiceUrl () {
       $config = parse_ini_file("config.ini");
       $environment = $config["environment"];
-      $domain = "https://".$environment.$config["serviceDomain"];
+      $domain = "https://".$environment.".".$config["serviceDomain"];
       $service = $config["service"];
       return $domain.$service;
     }

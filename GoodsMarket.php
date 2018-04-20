@@ -10,10 +10,6 @@
 	      $this->token = $token;
 	    }
 
-	    protected function getToken() { //не нужно?
-	    	return $this->$token;
-	    }
-
 	    public function newOrder($orderNewJson) {
 	    	$data = json_decode($orderNewJson, true);
 	    	$token="";
