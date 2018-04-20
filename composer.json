@@ -1,0 +1,15 @@
+{
+    "name": "mzubkov/goods-api-php-library",
+    "description": "Goods.ru: Partner API PHP Library",
+    "require": {
+        "ext-curl": "^7.51"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Maxim Zubkov",
+            "email": "maxim4217@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev"
+}
