@@ -6,6 +6,7 @@
     private $shipmentId;
     private $orderCode;
     private $boxNumber = 0;
+    private $label;
 
     public function __construct($token, $merchantId, $shipmentId, $orderCode = "") {
       $this->token = $token;
@@ -22,13 +23,13 @@
       return $this->orderCode;
     }    
 
-    public function setLabel ($label) {
-      $this->label = $label;
-    }
-
     public function getShipmentId () {
       return $this->shipmentId;
-    }    
+    }   
+
+    public function setLabel ($label) {
+      $this->label = $label;
+    } 
 
     public function orderConfirm ($items) {
       $confirmItems = [];
@@ -36,7 +37,7 @@
       try {
         $orderItems = $this->getOrderItems();
       } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
+        $result = ["success" => 0, "result" => $e->getMessage()];
         return $result;
       }
 
@@ -62,23 +63,21 @@
           ];
         }
       }
-
-      try {
-        $rejectResult = $this->orderReject($rejectItems);
-      } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
-        return $result;
-      }
-        
-      if(isset($rejectResult["success"])) {
-          if($rejectResult["success"] == 0|isset($rejectResult["message"])) {
-            $message = $rejectResult["message"];
-            $rejectResult["message"]= "Не удалось отправить order/reject на неподтвержденные лоты: ".$rejectResult["message"];
-            return $rejectResult;
-          }
-          if(empty($confirmItems)) {
-            return $rejectResult;
-          }         
+      if(!empty($rejectItems)) {
+	      try {
+	        $rejectResult = $this->orderReject($rejectItems);
+	      } catch (ErrorException $e) {
+	        $result = ["success" => 0, "result" => $e->getMessage()];
+	        return $result;
+	      }
+	        
+	      if(isset($rejectResult["success"])) {
+	          if($rejectResult["success"] == 0|isset($rejectResult["message"])) {
+	            $message = $rejectResult["message"];
+	            $rejectResult["message"]= "Не удалось отправить order/reject на неподтвержденные лоты: ".$rejectResult["message"];
+	            return $rejectResult;
+	          }   
+        }         
       }
 
       $data = [
@@ -93,11 +92,15 @@
               ]
   		];
       $data_string = json_encode($data);
-      $url = $this->getServiceUrl()."order/confirm";
+      try {
+      	$url = $this->getServiceUrl()."order/confirm";
+    	} catch (ErrorException $e) {
+    		return ["success" => 0, "result" => $e->getMessage()];
+    	}
       try {
         $result = $this->jsonPost($data_string, $url);
       } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
+        $result = ["success" => 0, "result" => $e->getMessage()];
         return $result;
       }
       return $this->parseResponse($result);
@@ -107,11 +110,14 @@
       
       $packingItems = [];
       $rejectItems = [];
+      if ($this->orderCode == "") {
+      	return ["success" => 0, "result" => "Не задан номер заказа продавца."];
+      }
       $this->boxNumber = count($items);
       try {
         $orderItems = $this->getOrderItems();
       } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
+        $result = ["success" => 0, "result" => $e->getMessage()];
         return $result;
       }
       for($i=0; $i < count($orderItems); $i++) {
@@ -139,22 +145,21 @@
           $rejectItems[] = ["itemIndex" => $k+1, "offerId" => $orderItems[$k]];
         }
       }
-      try {
-        $rejectResult = $this->orderReject($rejectItems);
-      } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
-        return $result;
-      }
-      if(isset($rejectResult["success"])) {
-          if(($rejectResult["success"] == 0)&(isset($rejectResult["message"]))) {
-            $message = $rejectResult["message"];
-            $rejectResult["message"]= "Не удалось отправить order/reject на неподтвержденные лоты: ".$rejectResult["message"];
+      if(!empty($rejectItems)) {
+	      try {
+	        $rejectResult = $this->orderReject($rejectItems);
+	      } catch (ErrorException $e) {
+	        $result = ["success" => 0, "result" => $e->getMessage()];
+	        return $result;
+	      }
+	      if(isset($rejectResult["success"])) {
+	          if(($rejectResult["success"] == 0)&(isset($rejectResult["message"]))) {
+	            $message = $rejectResult["message"];
+	            $rejectResult["message"]= "Не удалось отправить order/reject на неподтвержденные лоты: ".$rejectResult["message"];
 
-            return $rejectResult;
-          }
-          if(empty($rejectItems)) {
-            return $rejectResult;
-          }         
+	            return $rejectResult;
+	          }
+	      }         
       }
 
       $data = [
@@ -170,21 +175,26 @@
       ];
 
       $data_string = json_encode($data);
-      $url = $this->getServiceUrl()."order/packing";
-            try {
+      try {
+      	$url = $this->getServiceUrl()."order/packing";
+      } catch (ErrorException $e) {
+    		return ["success" => 0, "result" => $e->getMessage()];
+    	}
+      try {
         $result = $this->jsonPost($data_string, $url);
       } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
+        $result = ["success" => 0, "result" => $e->getMessage()];
         return $result;
       }
       return $this->parseResponse($result);
     }
 
     public function getOrderInfo() {
+    	$currentOrderCode = "";
     	try {
       	$result = $this-> orderGet();
     	} catch (ErrorException $e) {
-    		$result = ["success" => 0, "message" => $e->getMessage()];
+    		$result = ["success" => 0, "result" => $e->getMessage()];
         return $result;
     	}
       $items=[];
@@ -207,6 +217,8 @@
                       "deliveryDateFrom" => $result["data"]["shipments"][0]["deliveryDateFrom"],
                       "deliveryDateTo" => $result["data"]["shipments"][0]["deliveryDateTo"]
         ];
+      } else {
+      	return ["success" => 0, "result" => "Неизвестная ошибка1."];
       }
       if(isset($result["data"]["shipments"][0]["items"])) {
         for($u=0;$u<count($result["data"]["shipments"][0]["items"]); $u++) {
@@ -223,23 +235,29 @@
                     "boxIndex" => $result["data"]["shipments"][0]["items"][$u]["boxIndex"]
           ];
         }
+      } else {
+      	return ["success" => 0, "result" => "Неизвестная ошибка."];
       }
       $orderInfo["items"] = $items;
-      return $orderInfo; //добавить поле success
+      return ["success" => 1, "result" => $orderInfo];
     }
 
     public function getLabel() {
       $boxNumber = 0;
-      $orderGetResult = $this->orderGet();
+      try {
+      	$orderGetResult = $this->orderGet();
+    	} catch (ErrorException $e) {
+    		return ["success" => 0, "result" => $e->getMessage()];
+    	}
       if(isset($orderGetResult["data"]["shipments"][0]["orderCode"])) {
         $orderCode = $orderGetResult["data"]["shipments"][0]["orderCode"];
         if ($orderCode=="") {
-          $result = ["success" => 0, "message" => "Не выполнена комплектация заказа."];
-          return $result;
+          //$result = ["success" => 0, "result" => "Не выполнена комплектация заказа."];
+          return ["success" => 1, "result" => $this->label];
         }
       } else {
-        $result = ["success" => 0, "message" => "Не выполнена комплектация заказа."];
-        return $result;
+        //$result = ["success" => 0, "result" => "Не выполнена комплектация заказа."];
+        return ["success" => 1, "result" => $this->label];
       }
       if(isset($orderGetResult["data"]["shipments"][0]["items"])) {
 
@@ -251,7 +269,7 @@
           }
         }
       } else {
-        $result = ["success" => 0, "message" => "Не выполнена комплектация заказа."];
+        $result = ["success" => 0, "result" => "Неизвестная ошибка."];
         return $result;
       }
 
@@ -259,19 +277,49 @@
       for ($i=0; $i<$boxNumber; $i++) {
         $boxes[] = $this->merchantId."*".$orderCode."*".($i+1);
       }
+
       try{
         $label = $this->stickerPrint($boxes);
-        return $label;
-      } catch (ErrorException $e) {
-        $result  = ["success" => 0, "message" => $e->getMessage()];
+        $result  = ["success" => 1, "result" => $label];
         return $result;
+      } catch (ErrorException $e) {
+        $result  = ["success" => 0, "result" => $e->getMessage()];
+        return $result;
+      }
+    }
+
+    public function getOrderStatus() {
+    	$status=[];
+    	try {
+      	$result = $this-> orderGet();
+    	} catch (ErrorException $e) {
+    		$result = ["success" => 0, "result" => $e->getMessage()];
+        return $result;
+    	}
+
+    	if(isset($result["data"]["shipments"][0]["items"])) {
+          for($u=0;$u<count($result["data"]["shipments"][0]["items"]); $u++) {
+
+          			if (strpos($result["data"]["shipments"][0]["items"][$u]["status"], "CANCELED") == false) {
+                	$status[] = $result["data"]["shipments"][0]["items"][$u]["status"];
+              	}
+                
+                if(strpos($result["data"]["shipments"][0]["items"][$u]["status"], "PENDING") != false) { 
+                  return ["success" => 1, "result" => "Заказ в обработке."];
+                }    
+          }
+         	for ($k=0;$k<count($status); $k++) {
+            if (($k != 0) && ($status[$k] != $status[$k-1])) {
+              return ["success" => 0, "result" => "Некоторые лоты имеют разные статусы, заказ был неверно обработан."];
+            }         		
+         	}
+          return ["success" => 1, "result" => $status[0]];
+      } else {
+      	return ["success" => 0, "result" => "Не удалось получить информацию по заказу."];
       }
     }    
 
     private function orderReject ($rejectItems) {
-      if(empty($rejectItems)) {
-        return ["success" => 1];
-      }
       $data = [
               "meta" => [], 
               "data" => [
@@ -283,11 +331,15 @@
               ]
       ];
       $data_string = json_encode($data);
-      $url = $this->getServiceUrl()."order/reject";
+      try {
+      	$url = $this->getServiceUrl()."order/reject";
+      } catch (ErrorException $e) {
+    		throw $e;
+    	}
       try {
         $result = $this->jsonPost($data_string, $url);
       } catch (ErrorException $e) {
-        $result = ["success" => 0, "message" => $e->getMessage()];
+        $result = ["success" => 0, "result" => $e->getMessage()];
         return $result;
       }
       return $this->parseResponse($result);
@@ -306,8 +358,26 @@
       ];
 
       $data_string = json_encode($data);
-      $url = $this->getServiceUrl()."order/get";
-      $result = $this->jsonPost($data_string, $url);
+      try {
+      	$url = $this->getServiceUrl()."order/get";
+      } catch (ErrorException $e) {
+    		throw $e;
+    	}
+      try {
+      	$result = $this->jsonPost($data_string, $url);
+    	} catch (ErrorException $e) {
+    		throw $e;
+    	}
+      if ($result["success"]==0) {
+      	if(isset($result["error"]["message"])) {
+      		throw new ErrorException($result["error"]["message"]);
+      	} else {
+      		throw new ErrorException("Неизвестная ошибка.");
+      	}
+      } 
+      if (isset($result["data"]["shipments"]) & empty($result["data"]["shipments"])) {
+      	throw new ErrorException("Неизвестная ошибка.");
+      }
       return $result;
     }
 
@@ -320,7 +390,7 @@
           for($u=0;$u<count($result["data"]["shipments"][0]["items"]); $u++) {
 
                 $status = $result["data"]["shipments"][0]["items"][$u]["status"];
-                if(strpos($status, "PENDING") !== false) { 
+                if(strpos($status, "PENDING") != false) { 
                   $pendingFlag = true;
                   break;
                 }
@@ -332,7 +402,11 @@
     }
 
     private function getServiceUrl () {
-      $config = parse_ini_file("config.ini");
+    	if (file_exists("config.ini")) {
+      	$config = parse_ini_file("config.ini");
+    	} else {
+    		throw new ErrorException("Не найден конфигурационный файл.");
+    	}
       $environment = $config["environment"];
       $domain = "https://".$environment.".".$config["serviceDomain"];
       $service = $config["service"];
@@ -365,20 +439,28 @@
               ]
       ];
       $data = json_encode($data);
+      	try {
       $url = $this->getServiceUrl()."sticker/print";
-      $result = $this->jsonPost($data, $url);
+      } catch (ErrorException $e) {
+    		throw $e;
+    	}
+      try {
+      	$result = $this->jsonPost($data, $url);
+    	} catch (ErrorException $e) {
+    		throw $e;
+    	}
       if(isset($result["error"])) {
         if(isset($result["error"][0]["message"])) {
           throw new ErrorException($result["error"][0]["message"]);
         } else {
-          throw new ErrorException("Unknown error");
+          throw new ErrorException("Неизвестная ошибка.");
         }
       }
       if(isset($result["data"])){
         $label = $result["data"];
         return $label;
       } else {
-        throw new ErrorException("Unknown error"); 
+        throw new ErrorException("Неизвестная ошибка."); 
       }
     }
 
@@ -389,10 +471,12 @@
       curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);                                                                      
       curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json','Content-Length: '.strlen($data_string)));
       $res = curl_exec($ch);
-      if(curl_errno($ch)) {
-        throw new ErrorException(curl_error($ch));
-        }
-      curl_close($ch); // до ошибки?
+      $err_flag = curl_errno($ch);
+      if($err_flag) $err_message = curl_error($ch);
+      curl_close($ch);
+      if($err_flag) {
+        throw new ErrorException($err_message);
+      }
       $result = json_decode($res, true);
       return $result;
     }
