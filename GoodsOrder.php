@@ -203,7 +203,7 @@
         if(isset($result["data"]["shipments"][0]["orderCode"])) {
           $currentOrderCode = $result["data"]["shipments"][0]["orderCode"];
         }
-
+        //через if isset
         $orderInfo = [
                       "shipmentId" => $result["data"]["shipments"][0]["shipmentId"],
                       "orderCode" => $currentOrderCode,
@@ -218,7 +218,7 @@
                       "deliveryDateTo" => $result["data"]["shipments"][0]["deliveryDateTo"]
         ];
       } else {
-      	return ["success" => 0, "result" => "Неизвестная ошибка1."];
+      	return ["success" => 0, "result" => "Неизвестная ошибка."];
       }
       if(isset($result["data"]["shipments"][0]["items"])) {
         for($u=0;$u<count($result["data"]["shipments"][0]["items"]); $u++) {
@@ -252,12 +252,12 @@
       if(isset($orderGetResult["data"]["shipments"][0]["orderCode"])) {
         $orderCode = $orderGetResult["data"]["shipments"][0]["orderCode"];
         if ($orderCode=="") {
-          //$result = ["success" => 0, "result" => "Не выполнена комплектация заказа."];
           return ["success" => 1, "result" => $this->label];
         }
-      } else {
-        //$result = ["success" => 0, "result" => "Не выполнена комплектация заказа."];
+      } elseif (!empty($this->label)) {
         return ["success" => 1, "result" => $this->label];
+      } else {
+      	return ["success" => 0, "result" => "Неизвестная ошибка."];
       }
       if(isset($orderGetResult["data"]["shipments"][0]["items"])) {
 
@@ -298,22 +298,27 @@
     	}
 
     	if(isset($result["data"]["shipments"][0]["items"])) {
-          for($u=0;$u<count($result["data"]["shipments"][0]["items"]); $u++) {
+    		$items = $result["data"]["shipments"][0]["items"];
+          for($u=0;$u<count($items); $u++) {
 
-          			if (strpos($result["data"]["shipments"][0]["items"][$u]["status"], "CANCELED") == false) {
-                	$status[] = $result["data"]["shipments"][0]["items"][$u]["status"];
-              	}
-                
-                if(strpos($result["data"]["shipments"][0]["items"][$u]["status"], "PENDING") != false) { 
-                  return ["success" => 1, "result" => "Заказ в обработке."];
-                }    
+          			if(strpos($items[$u]["status"], "PENDING") !== false) { 
+                  return ["success" => 1, "result" => "Заказ в обработке"];
+                }
+
+          			if (strpos($items[$u]["status"], "CANCELED") === false) {
+                	$status[] = $items[$u]["status"];
+              	}  
           }
-         	for ($k=0;$k<count($status); $k++) {
-            if (($k != 0) && ($status[$k] != $status[$k-1])) {
-              return ["success" => 0, "result" => "Некоторые лоты имеют разные статусы, заказ был неверно обработан."];
-            }         		
+
+         	if (empty($status)) {
+         		return ["success" => 1, "result" => "CANCELED"];
          	}
+         	$status = array_unique($status);
+         	if(count($status)>1){
+         		return ["success" => 0, "result" => "Некоторые лоты имеют разные статусы, заказ был неверно обработан."];
+         	} else {
           return ["success" => 1, "result" => $status[0]];
+        	}
       } else {
       	return ["success" => 0, "result" => "Не удалось получить информацию по заказу."];
       }
@@ -346,7 +351,6 @@
     }
 
     private function orderGet () {
-
       $data = [
               "meta" => [], 
               "data" => [
@@ -382,20 +386,32 @@
     }
 
     private function getOrderItems() {
+    	$i = 0;
       do {
+      	if ($i==20) {
+      		throw new ErrorException("Заказ в обработке. Попробуйте снова.");
+      	}
         $pendingFlag = false;
+        try {
         $result = $this->orderGet();
+      	} catch (ErrorException $e) {
+      		throw $e;
+      	}
         $items = [];
         if(isset($result["data"]["shipments"][0]["items"])) {
           for($u=0;$u<count($result["data"]["shipments"][0]["items"]); $u++) {
 
                 $status = $result["data"]["shipments"][0]["items"][$u]["status"];
-                if(strpos($status, "PENDING") != false) { 
+                if(strpos($status, "PENDING") !== false) { 
                   $pendingFlag = true;
+                  sleep(1);
+                  $i++;
                   break;
                 }
                 $items[] = $result["data"]["shipments"][0]["items"][$u]["offerId"];
           }
+        } else {
+        	throw new ErrorException("Неизвестная ошибка.");
         }
       } while ($pendingFlag); //TODO some Exeption handling
         return $items;
@@ -406,15 +422,20 @@
       	$config = parse_ini_file("config.ini");
     	} else {
     		throw new ErrorException("Не найден конфигурационный файл.");
-    	}
+    	} 
+    		if (isset($config["environment"])&isset($config["serviceDomain"])&isset($config["service"])) {
       $environment = $config["environment"];
       $domain = "https://".$environment.".".$config["serviceDomain"];
       $service = $config["service"];
+    	} else {
+    		throw new ErrorException("Неверные данные в файле конфигурации.");
+    	}
+    	
       return $domain.$service;
     }
 
     private function parseResponse($response) {
-      $success;
+      $success ="";
       $result="";
 
         if(isset($response["success"])) {
