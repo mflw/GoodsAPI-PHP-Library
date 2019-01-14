@@ -1,4 +1,5 @@
 # GoodsAPI-PHP-Library
+https://packagist.org/packages/mzubkov/goods-api-php-library
 
 **Инициализация**
 
